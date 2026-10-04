@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Kavopay API Tester</title>
+<style>
+  :root{
+    --bg:#0b0f14; --card:#131a22; --line:#243040; --text:#e8eef5; --muted:#8a99ab;
+    --accent:#22c55e; --accent-ink:#04230f; --warn:#f59e0b; --bad:#ef4444; --info:#38bdf8;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Roboto,sans-serif}
+  body{padding:16px 14px calc(40px + env(safe-area-inset-bottom,0px));max-width:560px;margin:0 auto}
+  h1{font-size:20px;margin:6px 0 2px}
+  h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  input,select{width:100%;background:#0d131a;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  input[readonly]{color:var(--muted)}
+  .row{display:flex;gap:8px}
+  .row>*{flex:1}
+  .check{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted)}
+  .check input{width:auto}
+  button{background:var(--accent);color:var(--accent-ink);border:0;border-radius:10px;padding:12px 14px;font:inherit;font-weight:700;cursor:pointer;width:100%;margin-top:12px}
+  button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+  button.small{width:auto;padding:8px 12px;margin:0;font-size:13px}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .badge{font-size:11px;padding:3px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted);font-weight:500}
+  .badge.ok{color:var(--accent);border-color:var(--accent)}
+  .badge.warn{color:var(--warn);border-color:var(--warn)}
+  .big{font-size:28px;font-weight:800;letter-spacing:-.5px;margin:10px 0 0}
+  .out{margin-top:12px;border-radius:10px;padding:12px;background:#0d131a;border:1px solid var(--line);word-break:break-word}
+  .out.err{border-color:var(--bad)}
+  .out .k{color:var(--muted);font-size:12px}
+  .out .v{font-family:var(--mono);font-size:14px;margin-bottom:8px}
+  .out .v:last-child{margin-bottom:0}
+  .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-weight:700;font-size:12px}
+  .pill.pending{background:#3b2f0b;color:var(--warn)}
+  .pill.processing{background:#0b2b3b;color:var(--info)}
+  .pill.successful{background:#0b3b1d;color:var(--accent)}
+  .pill.failed{background:#3b0b0b;color:var(--bad)}
+  .hint{font-size:12px;color:var(--warn);margin-top:8px}
+  .hide{display:none}
+  details summary{cursor:pointer;color:var(--muted);font-size:13px}
+  pre{margin:10px 0 0;white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--mono);color:#b9c7d6;max-height:320px;overflow:auto}
+  a.link{color:var(--info)}
+</style>
+</head>
+<body>
+
+<h1>Kavopay API Tester</h1>
+<p class="sub">Balance checker + payment methods, routed through your worker.</p>
+
+<!-- CONNECTION -->
+<div class="card">
+  <h2>Connection <span id="srvBadge" class="badge">checking…</span></h2>
+  <label>API URL</label>
+  <input id="apiUrl" readonly>
+  <div id="keyFields">
+    <label>Public key (X-Public-Key)</label>
+    <input id="pub" placeholder="kavo_pub_xxxxxxxxxxxxxxxx" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <label>Secret key (Bearer)</label>
+    <input id="sec" type="password" placeholder="kavo_live_xxxxxxxxxxxxxxxx" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <label class="check"><input type="checkbox" id="showSec"> Show secret key</label>
+    <label class="check"><input type="checkbox" id="remember"> Remember keys on this device</label>
+  </div>
+  <div id="keyNote" class="hint hide"></div>
+</div>
+
+<!-- BALANCE -->
+<div class="card">
+  <h2>Wallet balance</h2>
+  <button id="btnBal">Check balance</button>
+  <div id="balOut" class="out hide"></div>
+</div>
+
+<!-- PAYMENT -->
+<div class="card">
+  <h2>Initiate payment</h2>
+  <div class="row">
+    <div>
+      <label>Amount (₦, min 100)</label>
+      <input id="amount" type="number" inputmode="decimal" min="100" value="5000">
+    </div>
+    <div>
+      <label>Method</label>
+      <select id="method">
+        <option value="card">Card</option>
+        <option value="opay">OPay</option>
+        <option value="ussd">USSD</option>
+        <option value="bank_transfer">Bank transfer</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="fRedirect">
+    <label>Redirect URL (after payment)</label>
+    <input id="redirect" type="url" placeholder="https://yoursite.com/paid" autocapitalize="off">
+  </div>
+  <div id="fBank" class="hide">
+    <label>Bank (USSD)</label>
+    <select id="bank"></select>
+  </div>
+
+  <button id="btnPay">Create payment</button>
+  <div id="payOut" class="out hide"></div>
+</div>
+
+<!-- VERIFY -->
+<div class="card">
+  <h2>Verify payment</h2>
+  <label>Reference (card, OPay, USSD only)</label>
+  <input id="ref" placeholder="KAVO-CARD-A1B2C3D4-1736500000000" autocapitalize="off" spellcheck="false">
+  <label class="check"><input type="checkbox" id="poll"> Auto-check every 5s until successful / failed</label>
+  <button id="btnVerify">Verify</button>
+  <div id="verOut" class="out hide"></div>
+</div>
+
+<!-- RAW -->
+<div class="card">
+  <details>
+    <summary>Last raw response</summary>
+    <pre id="raw">Nothing yet.</pre>
+  </details>
+</div>
+
+<script>
+const API_URL = "https://tutorial.godstimesunju.workers.dev";
+
+const BANKS = [
+  ["044","Access Bank"],["058","GTBank"],["033","UBA"],["057","Zenith Bank"],["011","First Bank"],
+  ["070","Fidelity"],["232","Sterling"],["032","Union Bank"],["076","Polaris"],["082","Keystone"]
+];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const naira = n => new Intl.NumberFormat("en-NG",{style:"currency",currency:"NGN"}).format(Number(n));
+
+let serverHasKeys = false;
+let pollTimer = null;
+
+/* ---------- setup ---------- */
+$("apiUrl").value = API_URL;
+$("bank").innerHTML = BANKS.map(([c,n]) => `<option value="${c}">${n} (${c})</option>`).join("");
+$("redirect").value = location.protocol.startsWith("http") ? location.origin + "/paid" : "";
+
+try {
+  const saved = JSON.parse(localStorage.getItem("kavo_keys") || "null");
+  if (saved) { $("pub").value = saved.pub || ""; $("sec").value = saved.sec || ""; $("remember").checked = true; }
+} catch {}
+
+function persistKeys() {
+  try {
+    if ($("remember").checked) localStorage.setItem("kavo_keys", JSON.stringify({ pub: $("pub").value.trim(), sec: $("sec").value.trim() }));
+    else localStorage.removeItem("kavo_keys");
+  } catch {}
+}
+["pub","sec","remember"].forEach(id => $(id).addEventListener("input", persistKeys));
+$("remember").addEventListener("change", persistKeys);
+$("showSec").addEventListener("change", e => { $("sec").type = e.target.checked ? "text" : "password"; });
+
+function syncMethodFields() {
+  const m = $("method").value;
+  $("fRedirect").classList.toggle("hide", !(m === "card" || m === "opay"));
+  $("fBank").classList.toggle("hide", m !== "ussd");
+}
+$("method").addEventListener("change", syncMethodFields);
+syncMethodFields();
+
+/* ---------- api helper ---------- */
+function authHeaders() {
+  const h = {};
+  const pub = $("pub").value.trim(), sec = $("sec").value.trim();
+  if (pub) h["X-Public-Key"] = pub;
+  if (sec) h["Authorization"] = "Bearer " + sec;
+  return h;
+}
+
+async function call(path, { method = "GET", body } = {}) {
+  const t0 = performance.now();
+  let status = 0, data;
+  try {
+    const res = await fetch(API_URL + path, {
+      method,
+      headers: { ...authHeaders(), ...(body ? { "Content-Type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    status = res.status;
+    const text = await res.text();
+    try { data = JSON.parse(text); } catch { data = { ok: false, message: text.slice(0, 500) }; }
+  } catch (e) {
+    data = { ok: false, error: "network_error", message: e.message };
+  }
+  const ms = Math.round(performance.now() - t0);
+  $("raw").textContent = `${method} ${path}  ->  ${status || "no response"}  (${ms}ms)\n\n` + JSON.stringify(data, null, 2);
+  return { status, data };
+}
+
+const HINTS = {
+  400: "Public key missing or not recognized. If it was sent and wrong, your IP may be blocked for 30 minutes.",
+  401: "Secret key missing, invalid, or revoked.",
+  403: "Account is below Tier 1 verification.",
+  404: "Endpoint or payment reference not found.",
+  405: "Wrong HTTP method.",
+  422: "Check the form values.",
+  429: "Too many requests (60/min per IP). Wait a bit and retry.",
+  502: "Payment provider rejected the request. Try again.",
+  504: "Kavopay timed out. Try again."
+};
+
+function showError(el, status, data) {
+  el.className = "out err";
+  const hint = HINTS[status] ? `<div class="hint">${esc(HINTS[status])}</div>` : "";
+  el.innerHTML = `<div class="k">Error ${status || ""}</div><div class="v">${esc(data.message || data.error || "Request failed")}</div>${hint}`;
+}
+
+function setBusy(btn, busy, label) {
+  btn.disabled = busy;
+  if (label) btn.textContent = busy ? "Please wait…" : label;
+}
+
+function row(k, v, extra = "") {
+  return `<div class="k">${esc(k)}</div><div class="v">${v}${extra}</div>`;
+}
+
+function copyBtn(text) {
+  return ` <button class="ghost small" data-copy="${esc(text)}">Copy</button>`;
+}
+
+document.addEventListener("click", async e => {
+  const t = e.target.closest("[data-copy]");
+  if (!t) return;
+  try { await navigator.clipboard.writeText(t.dataset.copy); t.textContent = "Copied"; setTimeout(() => t.textContent = "Copy", 1200); } catch {}
+});
+
+/* ---------- server health ---------- */
+(async function init() {
+  try {
+    const res = await fetch(API_URL + "/health");
+    const d = await res.json();
+    serverHasKeys = !!(d.server_keys && d.server_keys.public && d.server_keys.secret);
+    const b = $("srvBadge");
+    if (serverHasKeys) {
+      b.textContent = "worker has keys"; b.className = "badge ok";
+      $("keyNote").textContent = "Worker keys are set, so anything typed above is ignored.";
+      $("keyNote").classList.remove("hide");
+    } else {
+      b.textContent = "enter keys"; b.className = "badge warn";
+    }
+  } catch {
+    $("srvBadge").textContent = "worker unreachable"; $("srvBadge").className = "badge warn";
+  }
+})();
+
+/* ---------- balance ---------- */
+$("btnBal").addEventListener("click", async () => {
+  const btn = $("btnBal"), out = $("balOut");
+  setBusy(btn, true, "Check balance");
+  const { status, data } = await call("/balance");
+  setBusy(btn, false, "Check balance");
+  out.classList.remove("hide");
+  if (status === 200 && data.ok) {
+    out.className = "out";
+    out.innerHTML = `<div class="k">Available</div><div class="big">${esc(naira(data.balance))}</div><div class="k" style="margin-top:6px">${esc(data.currency || "NGN")}</div>`;
+  } else showError(out, status, data);
+});
+
+/* ---------- payment ---------- */
+$("btnPay").addEventListener("click", async () => {
+  const btn = $("btnPay"), out = $("payOut");
+  const method = $("method").value;
+  const body = { amount: Number($("amount").value), method };
+  if (method === "card" || method === "opay") body.redirect_url = $("redirect").value.trim();
+  if (method === "ussd") body.bank_code = $("bank").value;
+
+  setBusy(btn, true, "Create payment");
+  const { status, data } = await call("/payments", { method: "POST", body });
+  setBusy(btn, false, "Create payment");
+  out.classList.remove("hide");
+
+  if (!(status === 200 && data.ok)) return showError(out, status, data);
+
+  out.className = "out";
+  let html = row("Method", esc(data.method));
+
+  if (data.reference) {
+    html += row("Reference", esc(data.reference), copyBtn(data.reference));
+    $("ref").value = data.reference;
+  }
+  if (data.payment_link) {
+    html += row("Payment link", `<a class="link" href="${esc(data.payment_link)}" target="_blank" rel="noopener">${esc(data.payment_link)}</a>`);
+    html += `<button class="small" onclick="window.open(${JSON.stringify(data.payment_link).replace(/"/g,"&quot;")},'_blank')">Open checkout</button>`;
+  }
+  if (data.ussd_code) {
+    html += row("USSD code", esc(data.ussd_code), copyBtn(data.ussd_code));
+    html += row("Payment code", esc(data.payment_code));
+    html += row("Bank code", esc(data.bank_code));
+    html += `<a class="link" href="tel:${encodeURIComponent(data.ussd_code)}">Dial on this phone</a>`;
+  }
+  if (data.account_number) {
+    html += row("Account number", esc(data.account_number), copyBtn(data.account_number));
+    html += row("Bank", esc(data.bank_name));
+    html += row("Account name", esc(data.account_name));
+    if (data.note) html += `<div class="hint">${esc(data.note)} No reference or verify for this method, check your balance instead.</div>`;
+  }
+  out.innerHTML = html;
+});
+
+/* ---------- verify ---------- */
+function renderVerify(status, data) {
+  const out = $("verOut");
+  out.classList.remove("hide");
+  if (!(status === 200 && data.ok)) { showError(out, status, data); return null; }
+  out.className = "out";
+  out.innerHTML =
+    row("Reference", esc(data.reference)) +
+    row("Method", esc(data.method)) +
+    row("Amount", esc(naira(data.amount))) +
+    row("Status", `<span class="pill ${esc(data.status)}">${esc(data.status)}</span>`);
+  return data.status;
+}
+
+async function verifyOnce() {
+  const ref = $("ref").value.trim();
+  if (!ref) { renderVerify(422, { message: "Enter a payment reference first." }); return null; }
+  const { status, data } = await call("/payments/" + encodeURIComponent(ref));
+  return renderVerify(status, data);
+}
+
+function stopPoll() {
+  clearInterval(pollTimer); pollTimer = null; $("poll").checked = false;
+}
+
+$("btnVerify").addEventListener("click", async () => {
+  const btn = $("btnVerify");
+  setBusy(btn, true, "Verify");
+  await verifyOnce();
+  setBusy(btn, false, "Verify");
+});
+
+$("poll").addEventListener("change", e => {
+  if (!e.target.checked) { clearInterval(pollTimer); pollTimer = null; return; }
+  let tries = 0;
+  verifyOnce();
+  pollTimer = setInterval(async () => {
+    tries++;
+    const s = await verifyOnce();
+    if (s === "successful" || s === "failed" || s === null || tries >= 60) stopPoll();
+  }, 5000);
+});
+</script>
+</body>
+</html>
